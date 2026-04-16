@@ -285,281 +285,320 @@ select.form-input {
   font-weight: 600;
 }
 
-/* ── Attendance ── */
+/* ══════════════════════════════════════════
+   Attendance Screen
+   ══════════════════════════════════════════ */
 
-.att-controls-bar {
+/* ── Controls Row ── */
+.att-controls-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 20px;
   flex-wrap: wrap;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 16px;
-  margin-bottom: 16px;
+  gap: 12px;
 }
 
-.att-controls-divider {
-  width: 1px;
-  height: 28px;
-  background: var(--border);
-  flex-shrink: 0;
+.att-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.att-toggle {
-  display: inline-flex;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
+/* Weekly / Monthly tab toggle */
+.att-view-tabs {
+  display: flex;
+  gap: 0;
 }
 
-.att-toggle-btn {
-  padding: 5px 14px;
-  font-size: 13px;
+.att-view-tab {
+  padding: 6px 18px;
+  font-size: 14px;
   font-weight: 500;
-  border: none;
   cursor: pointer;
-  background: var(--card);
+  border: none;
+  background: none;
   color: var(--text-muted);
-  transition: background 0.2s, color 0.2s;
+  position: relative;
+  transition: color 0.2s;
 }
 
-.att-toggle-btn.active {
-  background: var(--primary);
-  color: white;
+.att-view-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background 0.2s;
 }
 
-.att-toggle-btn:not(.active):hover {
-  background: #f1f5f9;
+.att-view-tab.active {
+  color: var(--text);
+  font-weight: 600;
 }
 
-.att-nav {
+.att-view-tab.active::after {
+  background: var(--text);
+}
+
+.att-view-tab:hover {
+  color: var(--text);
+}
+
+/* Date navigation */
+.att-date-nav {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
 }
 
-.att-nav-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.att-date-nav-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.att-date-nav-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.att-date-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--card);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text);
-  transition: background 0.15s;
-}
-
-.att-nav-btn:hover {
-  background: #f1f5f9;
-}
-
-.att-nav-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  min-width: 160px;
-  justify-content: center;
-}
-
-.att-nav-label svg {
   color: var(--text-muted);
+  transition: all 0.15s;
+  flex-shrink: 0;
 }
 
-/* Stats ribbon */
-.att-stats-ribbon {
+.att-date-nav-btn:hover {
+  background: #f1f5f9;
+  color: var(--text);
+}
+
+/* ── Summary Stats (screenshot-style with dashed connectors) ── */
+.att-summary {
   display: flex;
+  align-items: stretch;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  overflow: hidden;
+  padding: 18px 0;
   margin-bottom: 20px;
+  overflow-x: auto;
 }
 
-.att-stat-cell {
-  flex: 1;
-  text-align: center;
-  padding: 16px 12px;
+.att-summary-primary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 28px;
+  border-right: 1px solid var(--border);
+  min-width: 120px;
 }
 
-.att-stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1.1;
+.att-summary-primary-num {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
 }
 
-.att-stat-label {
+.att-summary-primary-label {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   margin-top: 4px;
+  white-space: nowrap;
 }
 
-/* Cards */
-.att-card-list {
+.att-summary-pairs {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 24px;
+  border-right: 1px solid var(--border);
 }
 
-.att-card {
+.att-summary-pairs:last-child {
+  border-right: none;
+}
+
+.att-summary-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.att-summary-pair-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.att-summary-pair-dash {
+  flex: 1;
+  min-width: 20px;
+  height: 0;
+  border-bottom: 2px dashed #cbd5e1;
+}
+
+.att-summary-pair-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.att-summary-pair-unit {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ── Day Cards ── */
+.att-day-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.att-day-card {
   display: flex;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  transition: box-shadow 0.2s, border-color 0.2s;
+  transition: box-shadow 0.2s;
 }
 
-.att-card:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-  border-color: #cbd5e1;
+.att-day-card:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
 }
 
-/* Date column (employee view) */
-.att-card-date {
-  width: 76px;
-  padding: 14px 0;
+.att-day-card--muted {
+  opacity: 0.5;
+}
+
+/* Left column: day/date or avatar */
+.att-day-card-left {
+  width: 90px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid var(--border);
-  background: #fafbfc;
+  padding: 20px 0;
   flex-shrink: 0;
+  border-right: 1px solid var(--border);
 }
 
-.att-card-date.weekend {
-  background: #fef2f2;
-}
-
-.att-card-day {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.att-card-num {
-  font-size: 20px;
+.att-day-card-dayname {
+  font-size: 13px;
   font-weight: 700;
   color: var(--text);
-  line-height: 1.2;
+  letter-spacing: 0.02em;
 }
 
-.att-card-month {
-  font-size: 11px;
+.att-day-card-dayname.weekend {
+  color: var(--accent);
+}
+
+.att-day-card-date {
+  font-size: 12px;
   color: var(--text-muted);
+  margin-top: 2px;
 }
 
-/* Avatar column (date view) */
-.att-card-avatar-col {
-  width: 72px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-right: 1px solid var(--border);
-  background: #fafbfc;
-  flex-shrink: 0;
-}
-
-.att-card-avatar {
-  width: 40px;
-  height: 40px;
+.att-day-card-avatar {
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
 }
 
-/* Card body */
-.att-card-body {
+/* Right: card content */
+.att-day-card-content {
   flex: 1;
-  padding: 14px 20px;
+  padding: 16px 24px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 
-.att-card-row {
+.att-day-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.att-card-emp-info {
+.att-day-card-badges {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  min-width: 0;
+  flex-wrap: wrap;
 }
 
-.att-card-emp-name {
+.att-day-card-empname {
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.att-card-emp-id {
+.att-day-card-empid {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.att-day-card-worked {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
-.att-card-hours {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.att-day-card-worked strong {
   font-size: 15px;
-  font-weight: 700;
   color: var(--text);
-  flex-shrink: 0;
 }
 
-.att-card-hours svg {
-  color: var(--text-muted);
-}
-
-.att-card-hours-unit {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-left: 1px;
-}
-
-.att-card-empty {
+.att-day-card-empty {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 100%;
-  min-height: 52px;
+  min-height: 56px;
   color: var(--text-muted);
   font-size: 13px;
 }
 
-/* Status badge */
-.att-status-badge {
+/* ── Status Badge ── */
+.att-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   padding: 3px 10px;
   border-radius: 20px;
   font-size: 12px;
@@ -567,50 +606,122 @@ select.form-input {
   white-space: nowrap;
 }
 
-.att-status-dot {
-  width: 6px;
-  height: 6px;
+.att-badge-muted {
+  background: #f1f5f9;
+  color: var(--text-muted);
+}
+
+.att-badge-dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-/* Timeline */
-.att-timeline {
+/* ── Timeline (screenshot-style with endpoint dots) ── */
+.att-tl-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 
-.att-timeline-track {
-  height: 6px;
-  border-radius: 3px;
-  background: #e2e8f0;
+.att-tl-clock-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.att-tl-track-wrap {
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.att-tl-track {
+  width: 100%;
+  height: 8px;
+  background: #e8ecf1;
+  border-radius: 4px;
   position: relative;
   overflow: hidden;
 }
 
-.att-timeline-fill {
+.att-tl-bar {
   position: absolute;
   top: 0;
   height: 100%;
-  border-radius: 3px;
+  border-radius: 4px;
+  opacity: 0.75;
   transition: width 0.4s ease;
 }
 
-.att-timeline-labels {
-  display: flex;
-  justify-content: space-between;
+.att-tl-bar-empty {
+  width: 100%;
+  height: 100%;
+  background: #e8ecf1;
 }
 
-.att-timeline-time {
-  display: flex;
-  align-items: center;
-  gap: 3px;
+/* Circle endpoint markers */
+.att-tl-endpoint {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Late-in vertical marker */
+.att-tl-late-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f59e0b;
+  transform: translateX(-50%);
+  z-index: 1;
+  border-radius: 1px;
+}
+
+/* Time labels below track */
+.att-tl-time-labels {
+  position: relative;
+  height: 18px;
+  margin-top: 4px;
+}
+
+.att-tl-time {
+  position: absolute;
   font-size: 11px;
   color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  transform: translateX(-10%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-/* Empty state */
+.att-tl-time-right {
+  transform: translateX(10%);
+  text-align: right;
+}
+
+.att-tl-late-tag {
+  font-size: 10px;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+/* ── Empty state ── */
 .att-empty-state {
   display: flex;
   flex-direction: column;
@@ -641,7 +752,7 @@ select.form-input {
   max-width: 320px;
 }
 
-/* Modal helpers */
+/* ── Modal helpers ── */
 .att-modal-header {
   display: flex;
   justify-content: space-between;
@@ -680,30 +791,33 @@ select.form-input {
   margin-bottom: 20px;
 }
 
+/* ── Responsive ── */
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); }
   .main-content { margin-left: 0; }
 
-  .att-stats-ribbon {
+  .att-summary {
     flex-wrap: wrap;
   }
 
-  .att-stat-cell {
-    min-width: 33%;
+  .att-summary-primary {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
   }
 
-  .att-card-date,
-  .att-card-avatar-col {
-    width: 60px;
+  .att-summary-pairs {
+    padding: 10px 16px;
+    border-right: none;
   }
 
-  .att-card-body {
-    padding: 12px 14px;
+  .att-day-card-left {
+    width: 70px;
   }
 
-  .att-nav-label {
-    min-width: 120px;
-    font-size: 12px;
+  .att-day-card-content {
+    padding: 12px 16px;
   }
 }

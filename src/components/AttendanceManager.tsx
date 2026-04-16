@@ -3,16 +3,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Plus, X, ChevronLeft, ChevronRight,
-  LogIn, LogOut, Users, CalendarDays, Clock, Coffee
+  Users, CalendarDays, Clock, Coffee, History
 } from 'lucide-react';
 import { getAttendanceRecords, addAttendanceRecord, getEmployees } from '@/lib/store';
 import type { AttendanceRecord, Employee } from '@/types';
 
-/* ── Helpers ── */
+/* ── Constants & Helpers ── */
 
 const DAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+const SHIFT_START = '10:00'; // expected check-in
+const SHIFT_END = '18:00';   // expected check-out
 
 function getMonday(d: Date): Date {
   const date = new Date(d);
@@ -46,6 +49,7 @@ function parseDate(str: string) {
     dayName: DAY_NAMES[d.getDay()],
     dayNum: d.getDate(),
     month: MONTH_NAMES[d.getMonth()],
+    fullYear: d.getFullYear(),
     isWeekend: d.getDay() === 0 || d.getDay() === 6,
   };
 }
@@ -56,6 +60,7 @@ function fmt12(t: string): string {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
+/** Map a time string to a 0-100% position on a 6AM–10PM track */
 function timeToPercent(t: string): number {
   if (!t) return 0;
   const [h, m] = t.split(':').map(Number);
@@ -69,51 +74,116 @@ function calcHours(checkIn: string, checkOut: string): number {
   return Math.round(((h2 * 60 + m2) - (h1 * 60 + m1)) / 60 * 10) / 10;
 }
 
-const STATUS_STYLE: Record<string, { color: string; bg: string; fill: string }> = {
-  Present: { color: '#166534', bg: '#dcfce7', fill: 'linear-gradient(90deg, #4ade80, #16a34a)' },
-  Absent: { color: '#991b1b', bg: '#fee2e2', fill: 'linear-gradient(90deg, #f87171, #dc2626)' },
-  'Half Day': { color: '#92400e', bg: '#fef3c7', fill: 'linear-gradient(90deg, #fbbf24, #d97706)' },
-  'On Leave': { color: '#1e40af', bg: '#dbeafe', fill: 'linear-gradient(90deg, #60a5fa, #2563eb)' },
+function minutesBetween(a: string, b: string): number {
+  if (!a || !b) return 0;
+  const [h1, m1] = a.split(':').map(Number);
+  const [h2, m2] = b.split(':').map(Number);
+  return (h2 * 60 + m2) - (h1 * 60 + m1);
+}
+
+function getShiftLabel(checkIn: string): string {
+  if (!checkIn) return '';
+  const [h] = checkIn.split(':').map(Number);
+  if (h < 12) return 'Morning Shift';
+  if (h < 17) return 'Day Shift';
+  return 'Night Shift';
+}
+
+function fmtMinToHrs(min: number): string {
+  if (min <= 0) return '0';
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}`;
+  return `${h}h ${m}m`;
+}
+
+const STATUS_COLORS: Record<string, { dot: string; bg: string; barColor: string }> = {
+  Present:    { dot: '#22c55e', bg: 'rgba(34,197,94,0.1)',  barColor: '#22c55e' },
+  Absent:     { dot: '#ef4444', bg: 'rgba(239,68,68,0.1)',  barColor: '#ef4444' },
+  'Half Day': { dot: '#f59e0b', bg: 'rgba(245,158,11,0.1)', barColor: '#f59e0b' },
+  'On Leave': { dot: '#3b82f6', bg: 'rgba(59,130,246,0.1)', barColor: '#3b82f6' },
 };
 
-/* ── Sub-components ── */
+/* ── Timeline Bar (matches screenshot style, decluttered) ── */
 
 function TimelineBar({ checkIn, checkOut, status }: { checkIn: string; checkOut: string; status: string }) {
-  const left = timeToPercent(checkIn);
-  const right = timeToPercent(checkOut);
-  const width = right - left;
-  const cfg = STATUS_STYLE[status] || STATUS_STYLE.Present;
+  const inPos = timeToPercent(checkIn);
+  const outPos = timeToPercent(checkOut);
+  const width = outPos - inPos;
+  const sc = STATUS_COLORS[status] || STATUS_COLORS.Present;
+  const isLate = checkIn > SHIFT_START;
+  const lateMarkerPos = timeToPercent(SHIFT_START);
 
   if (!checkIn || !checkOut || width <= 0) {
-    return <div className="att-timeline-track" />;
+    return (
+      <div className="att-tl-section">
+        <div className="att-tl-track-wrap">
+          <div className="att-tl-track"><div className="att-tl-bar-empty" /></div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="att-timeline">
-      <div className="att-timeline-track">
-        <div
-          className="att-timeline-fill"
-          style={{ left: `${left}%`, width: `${width}%`, background: cfg.fill }}
-        />
+    <div className="att-tl-section">
+      {/* Clocked In / Clocked Out header labels */}
+      <div className="att-tl-clock-labels">
+        <span>Clocked In</span>
+        <span>Clocked Out</span>
       </div>
-      <div className="att-timeline-labels">
-        <span className="att-timeline-time">
-          <LogIn size={10} /> {fmt12(checkIn)}
+
+      {/* Timeline track with dots and bar */}
+      <div className="att-tl-track-wrap">
+        {/* Start dot */}
+        <div className="att-tl-endpoint" style={{ left: `${inPos}%`, borderColor: sc.barColor }} />
+        {/* End dot */}
+        <div className="att-tl-endpoint" style={{ left: `${outPos}%`, borderColor: sc.barColor }} />
+        {/* Track */}
+        <div className="att-tl-track">
+          <div
+            className="att-tl-bar"
+            style={{ left: `${inPos}%`, width: `${width}%`, background: sc.barColor }}
+          />
+        </div>
+        {/* Late-in marker */}
+        {isLate && (
+          <div className="att-tl-late-marker" style={{ left: `${lateMarkerPos}%` }} />
+        )}
+      </div>
+
+      {/* Time labels row */}
+      <div className="att-tl-time-labels">
+        <span className="att-tl-time" style={{ left: `${inPos}%` }}>
+          {fmt12(checkIn)}
+          {isLate && <span className="att-tl-late-tag">Late In</span>}
         </span>
-        <span className="att-timeline-time">
-          {fmt12(checkOut)} <LogOut size={10} />
+        <span className="att-tl-time att-tl-time-right" style={{ right: `${100 - outPos}%` }}>
+          {fmt12(checkOut)}
         </span>
       </div>
     </div>
   );
 }
 
+/* ── Status Badge ── */
+
 function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_STYLE[status] || STATUS_STYLE.Present;
+  const sc = STATUS_COLORS[status] || STATUS_COLORS.Present;
   return (
-    <span className="att-status-badge" style={{ background: cfg.bg, color: cfg.color }}>
-      <span className="att-status-dot" style={{ background: cfg.color }} />
+    <span className="att-badge" style={{ background: sc.bg, color: sc.dot }}>
+      <span className="att-badge-dot" style={{ background: sc.dot }} />
       {status}
+    </span>
+  );
+}
+
+function ShiftBadge({ label }: { label: string }) {
+  if (!label) return null;
+  return (
+    <span className="att-badge att-badge-muted">
+      <span className="att-badge-dot" style={{ background: '#94a3b8' }} />
+      {label}
     </span>
   );
 }
@@ -162,14 +232,37 @@ export default function AttendanceManager() {
     });
   }, [records, dateRange, isEmployeeView, selectedEmployee]);
 
+  /* ── Summary stats (matching screenshot categories) ── */
   const summary = useMemo(() => {
     const present = filteredRecords.filter(r => r.status === 'Present').length;
     const absent = filteredRecords.filter(r => r.status === 'Absent').length;
     const halfDay = filteredRecords.filter(r => r.status === 'Half Day').length;
     const onLeave = filteredRecords.filter(r => r.status === 'On Leave').length;
-    const totalHours = filteredRecords.reduce((s, r) => s + (r.workingHours || 0), 0);
-    return { present, absent, halfDay, onLeave, totalHours: Math.round(totalHours * 10) / 10 };
-  }, [filteredRecords]);
+
+    // Late-ins: total late minutes (when checkIn > SHIFT_START)
+    let lateMinutes = 0;
+    filteredRecords.forEach(r => {
+      if (r.checkIn && r.checkIn > SHIFT_START) {
+        lateMinutes += minutesBetween(SHIFT_START, r.checkIn);
+      }
+    });
+
+    // Early-outs: total early minutes (when checkOut < SHIFT_END)
+    let earlyMinutes = 0;
+    filteredRecords.forEach(r => {
+      if (r.checkOut && r.checkOut < SHIFT_END && r.status !== 'Half Day') {
+        earlyMinutes += minutesBetween(r.checkOut, SHIFT_END);
+      }
+    });
+
+    // Weekend days in range
+    const weekendDays = dateRange.filter(d => {
+      const day = new Date(d + 'T00:00:00').getDay();
+      return day === 0 || day === 6;
+    }).length;
+
+    return { present, absent, halfDay, onLeave, lateMinutes, earlyMinutes, weekendDays };
+  }, [filteredRecords, dateRange]);
 
   /* ── Navigation ── */
   const navPrev = () => {
@@ -187,7 +280,6 @@ export default function AttendanceManager() {
         : { month: prev.month - 1, year: prev.year });
     }
   };
-
   const navNext = () => {
     if (!isEmployeeView) {
       const d = new Date(selectedDate + 'T00:00:00');
@@ -207,14 +299,14 @@ export default function AttendanceManager() {
   const dateRangeLabel = useMemo(() => {
     if (!isEmployeeView) {
       const p = parseDate(selectedDate);
-      return `${p.dayName}, ${p.month} ${p.dayNum}`;
+      return `${p.dayNum} ${p.month} ${p.fullYear}`;
     }
     if (viewMode === 'weekly') {
       const end = new Date(weekStart);
       end.setDate(end.getDate() + 6);
       const s = parseDate(dateToStr(weekStart));
       const e = parseDate(dateToStr(end));
-      return `${s.month} ${s.dayNum} \u2013 ${e.month} ${e.dayNum}, ${weekStart.getFullYear()}`;
+      return `${s.dayNum} ${s.month} ${s.fullYear} - ${e.dayNum} ${e.month} ${e.fullYear}`;
     }
     return `${FULL_MONTHS[monthYear.month]} ${monthYear.year}`;
   }, [isEmployeeView, selectedDate, viewMode, weekStart, monthYear]);
@@ -263,39 +355,29 @@ export default function AttendanceManager() {
 
   const unmarkedCount = employees.length - records.filter(r => r.date === selectedDate).length;
 
-  /* ── Stat config ── */
-  const stats = [
-    { value: summary.present, label: 'Present', color: '#16a34a' },
-    { value: summary.absent, label: 'Absent', color: '#dc2626' },
-    { value: summary.halfDay, label: 'Half Day', color: '#d97706' },
-    { value: summary.onLeave, label: 'On Leave', color: '#2563eb' },
-    { value: `${summary.totalHours}h`, label: 'Total Hours', color: '#7c3aed' },
-  ];
-
   return (
     <div>
-      {/* Header */}
+      {/* ── Page Header ── */}
       <div className="page-header">
-        <h1 className="page-title">Attendance</h1>
+        <h1 className="page-title">Attendance Records</h1>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-secondary" onClick={() => setShowBulkModal(true)}>
             <Users size={15} /> Bulk Mark
           </button>
-          <button className="btn btn-primary" onClick={() => {
+          <button className="btn btn-primary" style={{ background: '#16a34a' }} onClick={() => {
             setFormData(f => ({ ...f, date: selectedDate }));
             setShowSingleModal(true);
           }}>
-            <Plus size={15} /> Add Record
+            <Plus size={15} /> Add Attendance
           </button>
         </div>
       </div>
 
-      {/* Controls Bar */}
-      <div className="att-controls-bar">
-        {/* Employee selector */}
+      {/* ── Employee Selector ── */}
+      <div style={{ marginBottom: 16 }}>
         <select
           className="form-input"
-          style={{ maxWidth: 220, fontSize: 13 }}
+          style={{ maxWidth: 280, fontSize: 14 }}
           value={selectedEmployee}
           onChange={e => setSelectedEmployee(e.target.value)}
         >
@@ -306,91 +388,132 @@ export default function AttendanceManager() {
             </option>
           ))}
         </select>
+      </div>
 
-        <div className="att-controls-divider" />
-
-        {/* Weekly / Monthly toggle (employee view only) */}
-        {isEmployeeView && (
-          <>
-            <div className="att-toggle">
+      {/* ── Controls Row: Weekly/Monthly + Date Nav ── */}
+      <div className="att-controls-row">
+        <div className="att-controls-left">
+          {/* Weekly / Monthly tabs */}
+          {isEmployeeView && (
+            <div className="att-view-tabs">
               {(['weekly', 'monthly'] as const).map(mode => (
                 <button
                   key={mode}
-                  className={`att-toggle-btn ${viewMode === mode ? 'active' : ''}`}
+                  className={`att-view-tab ${viewMode === mode ? 'active' : ''}`}
                   onClick={() => setViewMode(mode)}
                 >
                   {mode === 'weekly' ? 'Weekly' : 'Monthly'}
                 </button>
               ))}
             </div>
-            <div className="att-controls-divider" />
-          </>
-        )}
+          )}
 
-        {/* Date navigation */}
-        <div className="att-nav">
-          <button className="att-nav-btn" onClick={navPrev}>
-            <ChevronLeft size={16} />
-          </button>
-          <div className="att-nav-label">
-            <CalendarDays size={14} />
-            <span>{dateRangeLabel}</span>
+          {/* Date range nav */}
+          <div className="att-date-nav">
+            <CalendarDays size={15} className="att-date-nav-icon" />
+            <span className="att-date-nav-label">{dateRangeLabel}</span>
+            <button className="att-date-nav-btn" onClick={navPrev}>
+              <ChevronLeft size={16} />
+            </button>
+            <button className="att-date-nav-btn" onClick={navNext}>
+              <ChevronRight size={16} />
+            </button>
           </div>
-          <button className="att-nav-btn" onClick={navNext}>
-            <ChevronRight size={16} />
-          </button>
         </div>
       </div>
 
-      {/* Summary Stats */}
-      <div className="att-stats-ribbon">
-        {stats.map((stat, i) => (
-          <div
-            key={stat.label}
-            className="att-stat-cell"
-            style={{ borderRight: i < stats.length - 1 ? '1px solid var(--border)' : 'none' }}
-          >
-            <div className="att-stat-value" style={{ color: stat.color }}>{stat.value}</div>
-            <div className="att-stat-label">{stat.label}</div>
+      {/* ── Summary Stats (matching screenshot layout) ── */}
+      <div className="att-summary">
+        {/* Primary stat */}
+        <div className="att-summary-primary">
+          <span className="att-summary-primary-num">{String(summary.present).padStart(2, '0')}</span>
+          <span className="att-summary-primary-label">Total Present Days</span>
+        </div>
+
+        {/* Paired stats with dashed separators */}
+        <div className="att-summary-pairs">
+          <div className="att-summary-pair">
+            <span className="att-summary-pair-label">Early - Outs</span>
+            <span className="att-summary-pair-dash" />
+            <span className="att-summary-pair-value">{fmtMinToHrs(summary.earlyMinutes)}</span>
+            <span className="att-summary-pair-unit">Hrs.</span>
           </div>
-        ))}
+          <div className="att-summary-pair">
+            <span className="att-summary-pair-label">Late - Ins</span>
+            <span className="att-summary-pair-dash" />
+            <span className="att-summary-pair-value">{fmtMinToHrs(summary.lateMinutes)}</span>
+            <span className="att-summary-pair-unit">Hrs.</span>
+          </div>
+        </div>
+
+        <div className="att-summary-pairs">
+          <div className="att-summary-pair">
+            <span className="att-summary-pair-label">On Leave</span>
+            <span className="att-summary-pair-dash" />
+            <span className="att-summary-pair-value">{String(summary.onLeave).padStart(2, '0')}</span>
+            <span className="att-summary-pair-unit">Days</span>
+          </div>
+          <div className="att-summary-pair">
+            <span className="att-summary-pair-label">Absent</span>
+            <span className="att-summary-pair-dash" />
+            <span className="att-summary-pair-value">{String(summary.absent).padStart(2, '0')}</span>
+            <span className="att-summary-pair-unit">Days</span>
+          </div>
+        </div>
+
+        <div className="att-summary-pairs">
+          <div className="att-summary-pair">
+            <span className="att-summary-pair-label">Half Days</span>
+            <span className="att-summary-pair-dash" />
+            <span className="att-summary-pair-value">{String(summary.halfDay).padStart(2, '0')}</span>
+            <span className="att-summary-pair-unit">Days</span>
+          </div>
+          <div className="att-summary-pair">
+            <span className="att-summary-pair-label">Weekends</span>
+            <span className="att-summary-pair-dash" />
+            <span className="att-summary-pair-value">{summary.weekendDays}</span>
+            <span className="att-summary-pair-unit">Days</span>
+          </div>
+        </div>
       </div>
 
-      {/* Cards */}
-      <div className="att-card-list">
+      {/* ── Attendance Cards ── */}
+      <div className="att-day-cards">
         {isEmployeeView ? (
           /* ── Employee View: one card per day ── */
           dateRange.map(dateStr => {
             const record = filteredRecords.find(r => r.date === dateStr);
             const { dayName, dayNum, month, isWeekend } = parseDate(dateStr);
-            const cfg = record ? STATUS_STYLE[record.status] || STATUS_STYLE.Present : null;
 
             return (
               <div
                 key={dateStr}
-                className="att-card"
-                style={{ opacity: !record && isWeekend ? 0.55 : 1 }}
+                className={`att-day-card ${!record && isWeekend ? 'att-day-card--muted' : ''}`}
               >
-                {/* Date column */}
-                <div className={`att-card-date ${isWeekend ? 'weekend' : ''}`}>
-                  <span className="att-card-day" style={{ color: isWeekend ? 'var(--accent)' : undefined }}>
+                {/* Left: Day & Date */}
+                <div className="att-day-card-left">
+                  <span className={`att-day-card-dayname ${isWeekend ? 'weekend' : ''}`}>
                     {dayName}
                   </span>
-                  <span className="att-card-num">{dayNum}</span>
-                  <span className="att-card-month">{month}</span>
+                  <span className="att-day-card-date">{dayNum} {month}</span>
                 </div>
 
-                {/* Content */}
-                <div className="att-card-body">
+                {/* Right: Content */}
+                <div className="att-day-card-content">
                   {record ? (
                     <>
-                      <div className="att-card-row">
-                        <StatusBadge status={record.status} />
-                        <div className="att-card-hours">
-                          <Clock size={13} />
-                          {record.workingHours}<span className="att-card-hours-unit">hrs</span>
+                      {/* Header row: badges + worked hours */}
+                      <div className="att-day-card-header">
+                        <div className="att-day-card-badges">
+                          <StatusBadge status={record.status} />
+                          <ShiftBadge label={getShiftLabel(record.checkIn)} />
+                        </div>
+                        <div className="att-day-card-worked">
+                          Worked <strong>{record.workingHours}</strong> Hrs.
                         </div>
                       </div>
+
+                      {/* Timeline */}
                       <TimelineBar
                         checkIn={record.checkIn}
                         checkOut={record.checkOut}
@@ -398,7 +521,7 @@ export default function AttendanceManager() {
                       />
                     </>
                   ) : (
-                    <div className="att-card-empty">
+                    <div className="att-day-card-empty">
                       {isWeekend ? (
                         <><Coffee size={14} /> Weekend</>
                       ) : (
@@ -417,40 +540,31 @@ export default function AttendanceManager() {
               <CalendarDays size={44} strokeWidth={1.2} />
               <div className="att-empty-title">No attendance records</div>
               <div className="att-empty-desc">
-                No records for {dateRangeLabel}. Use &quot;Bulk Mark&quot; or &quot;Add Record&quot; to get started.
+                No records for this date. Use &quot;Bulk Mark&quot; or &quot;Add Attendance&quot; to get started.
               </div>
             </div>
           ) : (
             filteredRecords.map(record => {
-              const cfg = STATUS_STYLE[record.status] || STATUS_STYLE.Present;
+              const sc = STATUS_COLORS[record.status] || STATUS_COLORS.Present;
               return (
-                <div key={record.id} className="att-card">
-                  {/* Avatar column */}
-                  <div className="att-card-avatar-col">
-                    <div
-                      className="att-card-avatar"
-                      style={{ background: cfg.bg, color: cfg.color }}
-                    >
+                <div key={record.id} className="att-day-card">
+                  {/* Left: Employee avatar */}
+                  <div className="att-day-card-left">
+                    <div className="att-day-card-avatar" style={{ background: sc.bg, color: sc.dot }}>
                       {getEmpInitials(record.employeeId)}
                     </div>
                   </div>
-                  {/* Content */}
-                  <div className="att-card-body">
-                    <div className="att-card-row">
-                      <div className="att-card-emp-info">
-                        <span className="att-card-emp-name">
-                          {getEmpName(record.employeeId)}
-                        </span>
-                        <span className="att-card-emp-id">
-                          {getEmpCode(record.employeeId)}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+
+                  {/* Right: Content */}
+                  <div className="att-day-card-content">
+                    <div className="att-day-card-header">
+                      <div className="att-day-card-badges">
+                        <span className="att-day-card-empname">{getEmpName(record.employeeId)}</span>
+                        <span className="att-day-card-empid">{getEmpCode(record.employeeId)}</span>
                         <StatusBadge status={record.status} />
-                        <div className="att-card-hours">
-                          <Clock size={13} />
-                          {record.workingHours}<span className="att-card-hours-unit">hrs</span>
-                        </div>
+                      </div>
+                      <div className="att-day-card-worked">
+                        Worked <strong>{record.workingHours}</strong> Hrs.
                       </div>
                     </div>
                     <TimelineBar
@@ -472,24 +586,16 @@ export default function AttendanceManager() {
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="att-modal-header">
               <h2 className="att-modal-title">Bulk Mark Attendance</h2>
-              <button className="att-modal-close" onClick={() => setShowBulkModal(false)}>
-                <X size={20} />
-              </button>
+              <button className="att-modal-close" onClick={() => setShowBulkModal(false)}><X size={20} /></button>
             </div>
             <p className="att-modal-date">Date: <strong>{selectedDate}</strong></p>
             <p className="att-modal-hint">
               {unmarkedCount} employee{unmarkedCount !== 1 ? 's' : ''} without records will be marked.
             </p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-success" onClick={() => handleBulkMark('Present')}>
-                Mark All Present
-              </button>
-              <button className="btn btn-danger" onClick={() => handleBulkMark('Absent')}>
-                Mark All Absent
-              </button>
-              <button className="btn btn-secondary" onClick={() => handleBulkMark('Half Day')}>
-                Mark All Half Day
-              </button>
+              <button className="btn btn-success" onClick={() => handleBulkMark('Present')}>Mark All Present</button>
+              <button className="btn btn-danger" onClick={() => handleBulkMark('Absent')}>Mark All Absent</button>
+              <button className="btn btn-secondary" onClick={() => handleBulkMark('Half Day')}>Mark All Half Day</button>
             </div>
           </div>
         </div>
@@ -501,61 +607,32 @@ export default function AttendanceManager() {
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="att-modal-header">
               <h2 className="att-modal-title">Add Attendance Record</h2>
-              <button className="att-modal-close" onClick={() => setShowSingleModal(false)}>
-                <X size={20} />
-              </button>
+              <button className="att-modal-close" onClick={() => setShowSingleModal(false)}><X size={20} /></button>
             </div>
             <div className="form-group">
               <label className="form-label">Employee *</label>
-              <select
-                className="form-input"
-                value={formData.employeeId}
-                onChange={e => setFormData(f => ({ ...f, employeeId: e.target.value }))}
-              >
+              <select className="form-input" value={formData.employeeId} onChange={e => setFormData(f => ({ ...f, employeeId: e.target.value }))}>
                 <option value="">Select Employee</option>
-                {employees.map(e => (
-                  <option key={e.id} value={e.id}>
-                    {e.firstName} {e.lastName} ({e.employeeId})
-                  </option>
-                ))}
+                {employees.map(e => <option key={e.id} value={e.id}>{e.firstName} {e.lastName} ({e.employeeId})</option>)}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Date *</label>
-              <input
-                className="form-input"
-                type="date"
-                value={formData.date}
-                onChange={e => setFormData(f => ({ ...f, date: e.target.value }))}
-              />
+              <input className="form-input" type="date" value={formData.date} onChange={e => setFormData(f => ({ ...f, date: e.target.value }))} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div className="form-group">
                 <label className="form-label">Check In</label>
-                <input
-                  className="form-input"
-                  type="time"
-                  value={formData.checkIn}
-                  onChange={e => setFormData(f => ({ ...f, checkIn: e.target.value }))}
-                />
+                <input className="form-input" type="time" value={formData.checkIn} onChange={e => setFormData(f => ({ ...f, checkIn: e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Check Out</label>
-                <input
-                  className="form-input"
-                  type="time"
-                  value={formData.checkOut}
-                  onChange={e => setFormData(f => ({ ...f, checkOut: e.target.value }))}
-                />
+                <input className="form-input" type="time" value={formData.checkOut} onChange={e => setFormData(f => ({ ...f, checkOut: e.target.value }))} />
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Status</label>
-              <select
-                className="form-input"
-                value={formData.status}
-                onChange={e => setFormData(f => ({ ...f, status: e.target.value as AttendanceRecord['status'] }))}
-              >
+              <select className="form-input" value={formData.status} onChange={e => setFormData(f => ({ ...f, status: e.target.value as AttendanceRecord['status'] }))}>
                 <option>Present</option>
                 <option>Absent</option>
                 <option>Half Day</option>
@@ -563,12 +640,8 @@ export default function AttendanceManager() {
               </select>
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-              <button className="btn btn-secondary" onClick={() => setShowSingleModal(false)}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" onClick={handleSingleSubmit}>
-                Save Record
-              </button>
+              <button className="btn btn-secondary" onClick={() => setShowSingleModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSingleSubmit}>Save Record</button>
             </div>
           </div>
         </div>
